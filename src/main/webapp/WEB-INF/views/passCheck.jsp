@@ -36,6 +36,7 @@
 
                 <%-- mode에 따라 전송 주소를 다르게 설정 (수정 시 verify, 삭제 시 delete_verify) --%>
                 <form action="/board/${mode eq 'delete' ? 'delete_verify' : 'verify'}" method="post">
+                    <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
                     <input type="hidden" name="id" value="${id}">
 
                     <div class="mb-4">

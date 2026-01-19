@@ -13,7 +13,7 @@ public class BoardFile {
     private String fileOriginName; // 실제 이름
     private String fileType;       // image 또는 video 구분
 
-    @ManyToOne(cascade = CascadeType.ALL)
+    @ManyToOne
     @JoinColumn(name = "board_id")
     private Board board;
 }

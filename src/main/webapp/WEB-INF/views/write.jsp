@@ -34,6 +34,7 @@
 
                 <div class="card-body p-4">
                     <form action="/board/write" method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
 
                         <div class="form-floating mb-3">
                             <input type="text" name="title" class="form-control" id="title" placeholder="제목" required>
@@ -58,8 +59,13 @@
                         </c:if>
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold small"><i class="bi bi-paperclip"></i> 파일 첨부</label>
-                            <input type="file" name="file" class="form-control">
+                            <label class="form-label fw-bold small"><i class="bi bi-image"></i> 이미지 삽입</label>
+                            <input type="file" id="imageInput" name="imageFiles" class="form-control" multiple accept="image/*">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small"><i class="bi bi-play-btn"></i> 동영상 삽입</label>
+                            <input type="file" id="videoInput" name="videoFiles" class="form-control" multiple accept="video/*">
                         </div>
 
                         <div class="form-floating mb-4">
@@ -77,7 +83,40 @@
         </div>
     </div>
 </div>
+<script>
+    function insertTagsAtCursor(inputId, tagPrefix) {
+        const input = document.getElementById(inputId);
+        const textarea = document.getElementById('content');
 
+        input.addEventListener('change', function() {
+            const files = this.files;
+            if (files.length === 0) return;
+
+            // 삽입할 태그 문자열 생성 (예: [IMG_0][IMG_1])
+            let tags = "";
+            for (let i = 0; i < files.length; i++) {
+                tags += `[${tagPrefix}_${i}]`;
+            }
+
+            // 커서 위치 찾기
+            const startPos = textarea.selectionStart;
+            const endPos = textarea.selectionEnd;
+            const textBefore = textarea.value.substring(0, startPos);
+            const textAfter = textarea.value.substring(endPos);
+
+            // 본문에 태그 삽입
+            textarea.value = textBefore + tags + textAfter;
+
+            // 삽입 후 커서 위치를 태그 바로 뒤로 이동
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = startPos + tags.length;
+        });
+    }
+
+    // 이미지와 동영상 각각 적용
+    insertTagsAtCursor('imageInput', 'IMG');
+    insertTagsAtCursor('videoInput', 'VID');
+</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

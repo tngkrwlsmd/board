@@ -64,19 +64,32 @@
         </span>
       </div>
 
-      <div class="p-4 bg-white border rounded mb-5" style="min-height: 300px; white-space: pre-wrap;">${board.content}</div>
+      <%-- 기존의 ${board.content} 대신 아래 코드를 넣어주세요 --%>
+      <div class="p-4 bg-white border rounded mb-5" style="min-height: 300px; white-space: pre-wrap;">
+        <c:out value="${convertedContent}" escapeXml="false" />
+      </div>
 
-      <c:if test="${not empty board.fileName}">
-        <div class="mt-3 p-2 border rounded bg-light">
-          <i class="bi bi-paperclip"></i> 첨부파일:
-          <a href="/files/${board.fileName}" download="${board.fileOriginName}">${board.fileOriginName}</a>
+      <%-- 📎 첨부파일 리스트 영역 수정됨 --%>
+      <c:if test="${not empty board.files}">
+        <div class="mt-3 p-3 border rounded bg-light">
+          <h6 class="fw-bold mb-2"><i class="bi bi-paperclip"></i> 첨부파일</h6>
+          <ul class="list-unstyled mb-0">
+            <c:forEach var="file" items="${board.files}">
+              <li class="mb-1">
+                <a href="/files/${file.fileName}" download="${file.fileOriginName}" class="text-decoration-none">
+                  <i class="bi bi-file-earmark-arrow-down"></i> ${file.fileOriginName}
+                </a>
+              </li>
+            </c:forEach>
+          </ul>
         </div>
       </c:if>
 
-      <div class="bg-light p-4 rounded mb-4">
+      <div class="bg-light p-4 rounded mb-4 mt-4">
         <h5 class="mb-3 fw-bold"><i class="bi bi-chat-dots-fill"></i> 댓글 💬</h5>
 
         <form action="/board/comment/write" method="post" class="mb-4">
+          <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
           <input type="hidden" name="boardId" value="${board.id}">
 
           <c:if test="${empty pageContext.request.userPrincipal}">
@@ -119,7 +132,7 @@
                     </c:choose>
                   </span>
                 </c:if>
-              </span>a
+              </span>
                 <small class="text-muted">
                     ${comment.regDate.toString().substring(5,16).replace('T', ' ')}
                 </small>
@@ -159,24 +172,24 @@
         <c:set var="isMemberPost" value="${board.password eq 'SECURED_MEMBER_POST'}" />
 
         <c:choose>
-          <%-- 1. 현재 사용자가 로그인(회원) 상태일 때 --%>
           <c:when test="${not empty pageContext.request.userPrincipal}">
-            <%-- 이 글이 회원글이고, 작성자가 현재 로그인한 유저와 같다면 수정/삭제 노출 --%>
             <c:if test="${isMemberPost && pageContext.request.userPrincipal.name eq board.writer}">
               <a href="/board/edit/${board.id}" class="btn btn-warning px-4 me-2"><i class="bi bi-pencil-square"></i> 수정</a>
               <a href="/board/delete/${board.id}" class="btn btn-danger px-4" onclick="return confirm('정말 삭제하시겠습니까?')"><i class="bi bi-trash"></i> 삭제</a>
             </c:if>
           </c:when>
-
-          <%-- 2. 현재 사용자가 비회원(로그아웃) 상태일 때 --%>
           <c:otherwise>
-            <%-- 이 글이 비회원글(비밀번호가 고정값이 아님)이라면 수정/삭제 노출 --%>
             <c:if test="${!isMemberPost}">
               <a href="/board/edit/${board.id}" class="btn btn-warning px-4 me-2"><i class="bi bi-pencil-square"></i> 수정</a>
               <a href="/board/delete/${board.id}" class="btn btn-danger px-4"><i class="bi bi-trash"></i> 삭제</a>
             </c:if>
           </c:otherwise>
         </c:choose>
+      </div>
+      <div class="text-end mt-3">
+        <a href="/board/write" class="btn btn-primary px-4 shadow-sm">
+          <i class="bi bi-pencil-fill me-1"></i> 글쓰기
+        </a>
       </div>
     </div>
   </div>
@@ -187,74 +200,46 @@
 </c:if>
 
 <script>
-  // 비회원 댓글 삭제
-  // 1. 모달 띄우기
   function deleteComment(commentId) {
     document.getElementById('modalCommentId').value = commentId;
-    document.getElementById('modalCommentPw').value = ""; // 입력값 초기화
-
-    // 부트스트랩 모달 인스턴스 생성 후 표시
+    document.getElementById('modalCommentPw').value = "";
     const myModal = new bootstrap.Modal(document.getElementById('deleteCommentModal'));
     myModal.show();
   }
 
-  // 2. 모달 안에서 '삭제' 버튼 눌렀을 때 실행
   function confirmDeleteAjax() {
     const id = document.getElementById('modalCommentId').value;
     const pw = document.getElementById('modalCommentPw').value;
-
-    if (!pw) {
-      alert("비밀번호를 입력해주세요.");
-      return;
-    }
-
+    if (!pw) { alert("비밀번호를 입력해주세요."); return; }
     const params = "password=" + encodeURIComponent(pw);
-
     fetch("/board/comment/delete/" + id, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params
-    })
-            .then(res => res.text())
-            .then(data => {
-              if (data === "success") {
-                location.reload();
-              } else if (data === "pw_error") {
-                alert("비밀번호가 틀렸습니다.");
-              } else {
-                alert("삭제 권한이 없거나 오류가 발생했습니다.");
-              }
-            });
+    }).then(res => res.text()).then(data => {
+      if (data === "success") { location.reload(); }
+      else if (data === "pw_error") { alert("비밀번호가 틀렸습니다."); }
+      else { alert("삭제 권한이 없거나 오류가 발생했습니다."); }
+    });
   }
 
-  // 댓글 수정 (AJAX)
   function editComment(commentId, currentContent) {
     const newContent = prompt("수정할 내용을 입력하세요.", currentContent);
     if (!newContent) return;
-
     let pw = "";
-    // 비회원일 때만 비밀번호를 물어봅니다.
     <c:if test="${empty pageContext.request.userPrincipal}">
     pw = prompt("비밀번호를 입력하세요.");
     if(!pw) return;
     </c:if>
-
-    const params = "commentId=" + commentId +
-            "&content=" + encodeURIComponent(newContent) +
-            "&password=" + pw;
-
+    const params = "commentId=" + commentId + "&content=" + encodeURIComponent(newContent) + "&password=" + pw;
     fetch("/board/comment/update", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params
     }).then(res => res.text()).then(data => {
-      if(data === "success") {
-        location.reload();
-      } else if(data === "pw_error") {
-        alert("비밀번호가 틀렸습니다.");
-      } else {
-        alert("수정 권한이 없거나 오류가 발생했습니다.");
-      }
+      if(data === "success") { location.reload(); }
+      else if(data === "pw_error") { alert("비밀번호가 틀렸습니다."); }
+      else { alert("수정 권한이 없거나 오류가 발생했습니다."); }
     });
   }
 </script>

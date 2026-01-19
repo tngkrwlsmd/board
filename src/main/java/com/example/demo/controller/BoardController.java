@@ -1,11 +1,13 @@
 package com.example.demo.controller;
 
 import com.example.demo.entity.Board;
+import com.example.demo.entity.BoardFile;
 import com.example.demo.entity.Comment;
 import com.example.demo.repository.BoardRepository;
 import com.example.demo.repository.CommentRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,8 +31,8 @@ public class BoardController {
     private final BoardRepository boardRepository;
     private final CommentRepository commentRepository;
 
-    // 프로젝트 내 파일 저장 경로 (멤버 변수로 관리)
-    private final String uploadPath = System.getProperty("user.dir") + "/src/main/resources/static/files";
+    @Value("${file.upload-dir}")
+    private String uploadPath;
 
     @GetMapping("/")
     public String index() {
@@ -68,35 +70,42 @@ public class BoardController {
     }
 
     @PostMapping("/board/write")
-    public String write(Board board, @RequestParam("file") MultipartFile file,
-                        HttpServletRequest request) throws IOException { // request 추가
+    public String write(Board board,
+                        @RequestParam(value = "imageFiles", required = false) List<MultipartFile> imageFiles,
+                        @RequestParam(value = "videoFiles", required = false) List<MultipartFile> videoFiles,
+                        @RequestParam(value = "multipartFiles", required = false) List<MultipartFile> multipartFiles, // 이름 변경 및 필수 해제
+                        Principal principal, HttpServletRequest request) throws IOException {
 
-        // 비회원 글인 경우 (비밀번호가 고정값이 아님) IP 저장
-        if (!"SECURED_MEMBER_POST".equals(board.getPassword())) {
-            String ip = request.getRemoteAddr();
-            board.setWriter(ip);
+        if (principal != null) {
+            // 1. 로그인 회원
+            board.setWriter(principal.getName()); // ID 저장
+            board.setWriterNickname(principal.getName()); // 닉네임으로 ID 사용
+            board.setPassword("SECURED_MEMBER_POST"); // 회원용 고정 비번 필수!
+        } else {
+            // 2. 비회원
+            board.setWriter(request.getRemoteAddr()); // IP 저장
         }
 
-        // 파일 저장 로직
-        if (!file.isEmpty()) {
-            String projectPath = System.getProperty("user.dir") + "/src/main/resources/static/files";
+        File dir = new File(uploadPath);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
 
-            // 폴더가 존재하는지 확인하고, 없으면 생성
-            File dir = new File(projectPath);
-            if (!dir.exists()) {
-                dir.mkdirs(); // 하위 폴더까지 모두 생성
+        if (multipartFiles != null) { // 파일 리스트가 존재할 때만 실행
+            for (MultipartFile file : multipartFiles) {
+                if (!file.isEmpty()) {
+                    UUID uuid = UUID.randomUUID();
+                    String fileName = uuid + "_" + file.getOriginalFilename();
+                    file.transferTo(new File(uploadPath, fileName));
+
+                    BoardFile boardFile = new BoardFile();
+                    boardFile.setFileName(fileName);
+                    boardFile.setFileOriginName(file.getOriginalFilename());
+                    boardFile.setBoard(board);
+                    board.getFiles().add(boardFile);
+                }
             }
-
-            UUID uuid = UUID.randomUUID();
-            String fileName = uuid + "_" + file.getOriginalFilename();
-
-            File saveFile = new File(projectPath, fileName);
-            file.transferTo(saveFile);
-
-            board.setFileName(fileName);
-            board.setFileOriginName(file.getOriginalFilename());
         }
-
         boardRepository.save(board);
         return "redirect:/board/list";
     }
@@ -108,7 +117,21 @@ public class BoardController {
             board.setViewCount(board.getViewCount() + 1);
             boardRepository.save(board);
 
+            // 📝 본문 치환 로직 시작
+            String content = board.getContent();
+            List<BoardFile> files = board.getFiles();
+
+            for (int i = 0; i < files.size(); i++) {
+                String target = "[IMG_" + i + "]"; // 본문에서 찾을 표시
+                String replacement = "<img src='/files/" + files.get(i).getFileName() + "' class='img-fluid'>"; // 바꿀 HTML 태그
+
+                // 여기서 content 변수의 내용을 업데이트해야 합니다.
+                content = content.replace(target, replacement);
+            }
+
+            model.addAttribute("convertedContent", content); // 변환된 본문을 모델에 담습니다.
             model.addAttribute("board", board);
+
             List<Comment> comments = commentRepository.findByBoardIdOrderByRegDateDesc(id);
             model.addAttribute("comments", comments);
         }
@@ -142,50 +165,68 @@ public class BoardController {
     }
 
     @PostMapping("/board/update")
-    public String update(Board board, @RequestParam("file") MultipartFile file,
-                         @RequestParam(value="deleteFile", required=false) String deleteFile) throws IOException {
+    public String update(Board board,
+                         @RequestParam(value="multipartFiles", required=false) List<MultipartFile> multipartFiles, // 이름 변경
+                         @RequestParam(value="deleteFileIds", required=false) List<Long> deleteFileIds) throws IOException {
 
+        // 1. 기존 게시글 정보 가져오기
         Board oldBoard = boardRepository.findById(board.getId()).orElse(null);
         if (oldBoard == null) return "redirect:/board/list";
 
+        // 기본 정보 수정 (제목, 내용, 수정일)
         oldBoard.setTitle(board.getTitle());
         oldBoard.setContent(board.getContent());
         oldBoard.setModDate(LocalDateTime.now());
 
-        // 파일 수정 로직
-        if (deleteFile != null || !file.isEmpty()) {
-            if (oldBoard.getFileName() != null) {
-                File oldFile = new File(uploadPath, oldBoard.getFileName());
-                if (oldFile.exists()) oldFile.delete();
-                oldBoard.setFileName(null);
-                oldBoard.setFileOriginName(null);
+        // 2. 기존 파일 삭제 처리 (체크박스에 선택된 파일들)
+        if (deleteFileIds != null && !deleteFileIds.isEmpty()) {
+            // 리스트에서 요소를 삭제할 때는 removeIf를 사용하면 편리하고 안전합니다.
+            oldBoard.getFiles().removeIf(oldFile -> {
+                if (deleteFileIds.contains(oldFile.getId())) {
+                    // 물리적 파일 삭제 (서버 폴더에서 제거)
+                    File file = new File(uploadPath, oldFile.getFileName());
+                    if (file.exists()) {
+                        file.delete();
+                    }
+                    return true; // 리스트(논리적)에서도 삭제
+                }
+                return false;
+            });
+        }
+
+        // 3. 새 파일 추가 업로드 처리
+        if (multipartFiles != null && !multipartFiles.isEmpty()) {
+            for (MultipartFile file : multipartFiles) {
+                if (!file.isEmpty()) {
+                    // 폴더 존재 확인 및 생성
+                    File dir = new File(uploadPath);
+                    if (!dir.exists()) {
+                        dir.mkdirs();
+                    }
+
+                    UUID uuid = UUID.randomUUID();
+                    String fileName = uuid + "_" + file.getOriginalFilename();
+
+                    File saveFile = new File(uploadPath, fileName);
+                    file.transferTo(saveFile);
+
+                    // BoardFile 엔티티 생성 및 연결
+                    BoardFile boardFile = new BoardFile();
+                    boardFile.setFileName(fileName);
+                    boardFile.setFileOriginName(file.getOriginalFilename());
+                    boardFile.setBoard(oldBoard);
+
+                    oldBoard.getFiles().add(boardFile);
+                }
             }
         }
 
-        if (!file.isEmpty()) {
-            String projectPath = System.getProperty("user.dir") + "/src/main/resources/static/files";
-
-            // 폴더가 존재하는지 확인하고, 없으면 생성
-            File dir = new File(projectPath);
-            if (!dir.exists()) {
-                dir.mkdirs(); // 하위 폴더까지 모두 생성
-            }
-
-            UUID uuid = UUID.randomUUID();
-            String fileName = uuid + "_" + file.getOriginalFilename();
-
-            File saveFile = new File(projectPath, fileName);
-            file.transferTo(saveFile);
-
-            board.setFileName(fileName);
-            board.setFileOriginName(file.getOriginalFilename());
-        }
-
+        // 4. 최종 저장
         boardRepository.save(oldBoard);
         return "redirect:/board/view/" + board.getId();
     }
 
-    // [수정됨] 삭제 폼 매핑 중복 해결 및 실제 파일 삭제 연동
+    // 삭제 폼 매핑 중복 해결 및 실제 파일 삭제 연동
     @GetMapping("/board/delete/{id}")
     public String deleteForm(@PathVariable("id") Long id, Model model, Principal principal) {
         Board board = boardRepository.findById(id).orElse(null);
@@ -219,9 +260,16 @@ public class BoardController {
 
     // 실제 파일 삭제 공통 메서드
     private void deleteActualFile(Board board) {
-        if (board.getFileName() != null) {
-            File file = new File(uploadPath, board.getFileName());
-            if (file.exists()) file.delete();
+        // 1. 게시글에 연결된 파일 리스트가 비어있지 않은지 먼저 확인합니다.
+        if (board.getFiles() != null && !board.getFiles().isEmpty()) {
+            // 2. 리스트에서 BoardFile 객체를 하나씩 꺼내어 처리합니다.
+            for (BoardFile file : board.getFiles()) {
+                // 3. 물리적 파일 삭제 (저장된 UUID 이름을 사용합니다) 💾
+                File physicalFile = new File(uploadPath, file.getFileName());
+                if (physicalFile.exists()) {
+                    physicalFile.delete();
+                }
+            }
         }
     }
 

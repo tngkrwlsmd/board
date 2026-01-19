@@ -39,6 +39,7 @@
                 </c:if>
 
                 <form action="/member/login_proc" method="post">
+                    <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
 
                     <div class="form-floating mb-3">
                         <input type="text" name="memberId" class="form-control" id="username" placeholder="ID" required>

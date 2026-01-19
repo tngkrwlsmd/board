@@ -36,6 +36,7 @@
 
                 <div class="card-body p-4">
                     <form action="/board/update" method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
                         <input type="hidden" name="id" value="${board.id}">
 
                         <div class="form-floating mb-3">
@@ -47,29 +48,31 @@
                             <label class="form-label fw-bold small"><i class="bi bi-paperclip"></i> 첨부파일 관리</label>
                             <div class="card bg-light border-dashed">
                                 <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold small"><i class="bi bi-paperclip"></i> 파일 첨부</label>
+                                        <input type="file" name="multipartFiles" class="form-control" multiple>
+                                    </div>
                                     <c:choose>
-                                        <c:when test="${not empty board.fileOriginName}">
-                                            <div class="d-flex align-items-center justify-content-between mb-3 p-2 bg-white rounded border">
-                                                <div class="text-truncate me-2">
-                                                    <span class="badge bg-primary me-2">기존 파일</span>
-                                                    <span class="text-dark small fw-bold">${board.fileOriginName}</span>
+                                        <%-- 1. 기존 파일 목록 출력 --%>
+                                        <c:when test="${not empty board.files}">
+                                            <c:forEach var="file" items="${board.files}">
+                                                <div class="d-flex align-items-center justify-content-between mb-2 p-2 bg-white rounded border">
+                                                    <div class="text-truncate me-2">
+                                                        <span class="badge bg-primary me-2">기존 파일</span>
+                                                        <span class="text-dark small fw-bold">${file.fileOriginName}</span>
+                                                    </div>
+                                                        <%-- 삭제할 파일의 ID를 서버로 전송할 체크박스 --%>
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox" name="deleteFileIds" value="${file.id}" id="deleteFile_${file.id}">
+                                                        <label class="form-check-label small text-danger" for="deleteFile_${file.id}">삭제</label>
+                                                    </div>
                                                 </div>
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" name="deleteFile" id="deleteFile">
-                                                    <label class="form-check-label small text-danger" for="deleteFile">삭제</label>
-                                                </div>
-                                            </div>
-                                            <p class="text-muted extra-small mb-2">* 새 파일을 선택하면 기존 파일은 자동으로 교체됩니다.</p>
+                                            </c:forEach>
                                         </c:when>
                                         <c:otherwise>
                                             <p class="text-muted small mb-2">첨부된 파일이 없습니다.</p>
                                         </c:otherwise>
                                     </c:choose>
-
-                                    <div class="input-group input-group-sm">
-                                        <input type="file" name="file" class="form-control" id="inputFile">
-                                        <label class="input-group-text" for="inputFile">새 파일 업로드</label>
-                                    </div>
                                 </div>
                             </div>
                         </div>

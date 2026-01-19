@@ -31,6 +31,7 @@
                 </div>
 
                 <form action="/member/join" method="post">
+                    <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
                     <div class="mb-3">
                         <label class="form-label fw-bold small">아이디</label>
                         <div class="input-group">

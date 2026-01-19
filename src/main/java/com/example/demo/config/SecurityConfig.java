@@ -15,7 +15,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // 테스트를 위해 비활성화
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/member/**", "/board/list", "/").permitAll()
                         // 추가: 에러 페이지와 모든 리소스를 일단 다 열어줍니다.

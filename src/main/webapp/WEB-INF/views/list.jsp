@@ -37,6 +37,7 @@
                 <c:if test="${not empty pageContext.request.userPrincipal}">
                     <span class="ms-2"><b>${pageContext.request.userPrincipal.name}</b>님 환영합니다!
                         <form action="/member/logout" method="post" class="d-inline ms-2">
+                            <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}"/>
                             <button type="submit" class="btn btn-sm btn-outline-light">로그아웃</button>
                         </form>
                     </span>
